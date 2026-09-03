@@ -1,0 +1,78 @@
+{
+  "run_id": "run_20260901_205551_f6eed3",
+  "file_name": "orders_sample.csv",
+  "file_size_mb": 20.88,
+  "engine_used": "python_batch",
+  "rows_read": 50000,
+  "raw_loaded": 50000,
+  "valid_count": 339,
+  "corrected_count": 47603,
+  "quarantine_count": 2058,
+  "elapsed_seconds": 24.66,
+  "throughput": 2027.2,
+  "batch_size": 5000,
+  "partitions": 1,
+  "error_case_counts": {
+    "CORRUPTED_ITEMS_JSON": 659,
+    "AMBIGUOUS_NEGATIVE_VALUE": 334,
+    "MISSING_ORDER_ID": 382,
+    "EMPTY_ITEMS": 351,
+    "INVALID_IMPOSSIBLE_DATE": 332
+  },
+  "inserted_count": 0,
+  "updated_count": 47942,
+  "unchanged_count": 0,
+  "timestamps": {
+    "started_at": "2026-09-01T20:55:51.917372",
+    "completed_at": "2026-09-01T20:56:16.581414",
+    "duration_seconds": 24.66
+  },
+  "performance": {
+    "total_duration_seconds": 24.66,
+    "throughput_records_per_sec": 2027.2
+  },
+  "record_counts": {
+    "run_raw_count": 50000,
+    "run_valid_count": 339,
+    "run_corrected_count": 47603,
+    "run_quarantine_count": 2058
+  },
+  "consistency_rule": {
+    "is_consistent": true,
+    "raw_count": 50000,
+    "sum_processed": 50000,
+    "valid_count": 339,
+    "corrected_count": 47603,
+    "quarantine_count": 2058,
+    "discrepancy": 0,
+    "equation": "50000 (raw) == 339 (valid) + 47603 (corrected) + 2058 (quarantine)"
+  },
+  "upsert_metrics": {
+    "inserted_new": 0,
+    "updated_existing": 47942,
+    "unchanged": 0,
+    "total_upsert_operations": 47942
+  },
+  "quarantine_breakdown": {
+    "CORRUPTED_ITEMS_JSON": 659,
+    "AMBIGUOUS_NEGATIVE_VALUE": 334,
+    "MISSING_ORDER_ID": 382,
+    "EMPTY_ITEMS": 351,
+    "INVALID_IMPOSSIBLE_DATE": 332
+  },
+  "rule_corrections_breakdown": {
+    "R8_WHITESPACE_AND_SYNONYMS": 47603,
+    "R1_ARABIC_NUMERALS": 1653,
+    "R3_THOUSANDS_SEPARATOR": 540,
+    "EMAIL_REPEATED_SYMBOLS": 1120,
+    "R7_DATE_STANDARDIZATION": 1176,
+    "R2_CURRENCY_NORMALIZATION": 566,
+    "R4_PRICE_WORDS_TRANSLATION": 544,
+    "R5_PHONE_STANDARDIZATION": 1192
+  },
+  "configuration": {
+    "batch_size": 5000,
+    "threshold_mb": 200.0,
+    "engine_override": null
+  }
+}
