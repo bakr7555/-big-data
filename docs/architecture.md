@@ -14,6 +14,7 @@
 | **نمط المعمارية:** | ELT (Extract $\to$ Load Raw $\to$ In-Database Transform & Validate) |
 | **محركات المعالجة:** | Python Streaming Batch ($O(1)$ Memory) + Apache PySpark (Distributed DataFrame API) |
 | **قاعدة البيانات:** | MongoDB 8.x (WiredTiger Engine, PyMongo Client, Unique Indexing) |
+| **اسم الطالب:** | بكر مهيوب خالد سيف التبعي |
 | **المسار المنفذ:** | مسار الطالب الفردي الكامل (10 / 10) وفق البنود 6.1 إلى 6.12 |
 
 ---

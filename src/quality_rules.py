@@ -1,18 +1,8 @@
 """
 quality_rules.py - Data Transformation, Quality Auditing & Quarantine Classification
-
-Implements the 8 Mandatory Auto-Cleaning Rules:
-  1. Arabic Numerals (R1_ARABIC_NUMERALS): '٠١٢٣٤٥٦٧٨٩' -> '0123456789' and numeric casting.
-  2. Currency Normalization (R2_CURRENCY_NORMALIZATION): Strip symbols/text, standardize to 'YER'.
-  3. Thousands Separators (R3_THOUSANDS_SEPARATOR): Remove ',' / '_' / spaces in numbers.
-  4. Price in Words (R4_PRICE_WORDS_TRANSLATION): Convert known Arabic price words (e.g. 'ألفان' -> 2000).
-  5. Phone Number Standardization (R5_PHONE_STANDARDIZATION): Clean spaces, standardize to 9-digit format.
-  6. Email Syntax Repair (R6_EMAIL_SYNTAX_REPAIR): Fix '@@', '..', leading/trailing garbage.
-  7. Date Standardization (R7_DATE_STANDARDIZATION): Unify formats ('31/01/2025', ISO, etc.) to ISO 8601.
-  8. Whitespace & Synonyms (R8_WHITESPACE_AND_SYNONYMS): Trim extra whitespace and map statuses via standard dictionary.
-
-Maintains strict audit trail with `corrections` object and classifies uncorrectable records into quarantine.
+Implements the 8 Mandatory Auto-Cleaning Rules and Doctor's Exact Quarantine & Correction Criteria.
 """
+
 import json
 import re
 import sys
@@ -31,8 +21,10 @@ from config.settings import (
     TARGET_CURRENCY,
     VALID_STATUS_MAP,
 )
+
 # Arabic-Indic to ASCII digit mapping
 ARABIC_INDIC_DIGITS = str.maketrans("٠١٢٣٤٥٦٧٨٩٫،", "0123456789..")
+
 # Rule Codes Constants
 RULE_R1_ARABIC_NUMERALS = "R1_ARABIC_NUMERALS"
 RULE_R2_CURRENCY = "R2_CURRENCY_NORMALIZATION"
@@ -43,28 +35,31 @@ RULE_R6_EMAIL = "EMAIL_REPEATED_SYMBOLS"
 RULE_R7_DATE = "R7_DATE_STANDARDIZATION"
 RULE_R8_WHITESPACE_SYNONYMS = "R8_WHITESPACE_AND_SYNONYMS"
 RULE_R9_TOTAL_RECALCULATION = "R9_TOTAL_AMOUNT_RECALCULATION"
+RULE_ITEMS_QTY_STRING = "ITEMS_QTY_STRING_CAST"
 
-# Official Quarantine Error Codes (Page 5, Section 6.8)
-ERR_MISSING_ORDER_ID = "MISSING_ORDER_ID"
-ERR_MISSING_CUSTOMER_ID = "MISSING_CUSTOMER_ID"
-ERR_INVALID_IMPOSSIBLE_DATE = "INVALID_IMPOSSIBLE_DATE"
-ERR_CORRUPTED_ITEMS_JSON = "CORRUPTED_ITEMS_JSON"
-ERR_EMPTY_ITEMS = "EMPTY_ITEMS"
+# Official Quarantine Error Codes (Matching Doctor Image 3)
+ERR_MISSING_ORDER_ID = "معرف الطلب مفقود"
+ERR_MISSING_CUSTOMER_ID = "معرف العميل مفقود"
+ERR_INVALID_SHORT_PHONE = "رقم هاتف غير صالح وقصير"
+ERR_INVALID_EMAIL_NO_DOMAIN = "بريد إلكتروني بدون نطاق"
+ERR_INVALID_IMPOSSIBLE_DATE = "تاريخ مستحيل"
+ERR_UNKNOWN_STATUS = "حالة طلب غير معروفة"
+ERR_EMPTY_ITEMS = "الطلب بدون عناصر"
+ERR_CORRUPTED_ITEMS_JSON = "العناصر تالف JSON"
+ERR_MISSING_ITEM_SKU = "مفقود من أحد العناصر SKU"
+ERR_NEGATIVE_QUANTITY = "كمية سالبة"
+ERR_UNKNOWN_CURRENCY = "عملة غير معروفة"
+ERR_MULTIPLE_CONFLICTING_ERRORS = "عدة أخطاء جوهرية متعارضة"
+
 ERR_UNKNOWN_PRICE = "UNKNOWN_PRICE"
 ERR_AMBIGUOUS_NEGATIVE_VALUE = "AMBIGUOUS_NEGATIVE_VALUE"
 ERR_DUPLICATE_ORDER_ID = "DUPLICATE_ORDER_ID"
-ERR_MULTIPLE_CONFLICTING_ERRORS = "MULTIPLE_CONFLICTING_ERRORS"
-ERR_CORRUPTED_RECORD = "CORRUPTED_RECORD"
 
 
 # =========================================================================
 # Rule 1: Arabic Numerals Conversion
 # =========================================================================
 def clean_arabic_numerals(value: Any) -> Tuple[Optional[str], bool]:
-    """
-    Converts Eastern Arabic/Indic numerals ('٠١٢٣٤٥٦٧٨٩') and Arabic decimal separator ('٫') to ASCII.
-    Returns (cleaned_str, was_corrected).
-    """
     if value is None:
         return None, False
     val_str = str(value)
@@ -74,20 +69,16 @@ def clean_arabic_numerals(value: Any) -> Tuple[Optional[str], bool]:
 
 
 # =========================================================================
-# Rule 2 & 3 & 4: Monetary Amount Cleaning (Words, Currency, Thousands Separator)
+# Rule 2, 3, 4: Monetary Amount Cleaning
 # =========================================================================
 def clean_monetary_amount(value: Any, field_name: str = "amount") -> Tuple[Optional[float], List[Dict[str, Any]], Optional[str]]:
-    """
-    Applies R1, R2, R3, R4 to convert raw amount into a valid float.
-    Returns: (cleaned_float, list_of_corrections, error_code_if_failed)
-    """
     corrections = []
     if value is None or str(value).strip() == "" or str(value).strip() == "???":
         return None, corrections, ERR_UNKNOWN_PRICE
 
     raw_str = str(value).strip()
 
-    # Check Rule 4: Price in Words (exact match or known phrase)
+    # Check Rule 4: Price in Words
     normalized_text = re.sub(r"\s+", " ", raw_str)
     if normalized_text in ARABIC_WORDS_NUMBER_MAP:
         word_value = float(ARABIC_WORDS_NUMBER_MAP[normalized_text])
@@ -121,10 +112,8 @@ def clean_monetary_amount(value: Any, field_name: str = "amount") -> Tuple[Optio
         })
         cleaned_str = no_curr_str
 
-    # Step C: Rule 3 - Remove Thousands Separators (commas, underscores, spaces within digits)
-    # Handle patterns like 1,000,000 or 1 000 000
+    # Step C: Rule 3 - Remove Thousands Separators
     if re.search(r"\d+([,_ ]\d{3})+", cleaned_str):
-        # Remove commas, underscores, and spacing inside numbers
         no_sep_str = re.sub(r"(?<=\d)[,_ ](?=\d)", "", cleaned_str).strip()
         if no_sep_str != cleaned_str:
             corrections.append({
@@ -151,11 +140,6 @@ def clean_monetary_amount(value: Any, field_name: str = "amount") -> Tuple[Optio
 # Rule 5: Phone Number Standardization
 # =========================================================================
 def clean_phone_number(value: Any) -> Tuple[Optional[str], Optional[Dict[str, Any]]]:
-    """
-    Standardizes Yemeni phone numbers:
-    - Removes spaces, dashes, brackets, country codes (+967, 00967).
-    - Normalizes to 9-digit format (e.g. 702390941, 777123456, 712345678, 732345678).
-    """
     if value is None:
         return None, None
 
@@ -163,13 +147,9 @@ def clean_phone_number(value: Any) -> Tuple[Optional[str], Optional[Dict[str, An
     if not raw_str:
         return None, None
 
-    # Apply Arabic numerals conversion first
     cleaned, _ = clean_arabic_numerals(raw_str)
-
-    # Strip non-digits
     digits_only = re.sub(r"\D", "", cleaned)
 
-    # Remove Yemen country code prefix 967 or 00967
     if digits_only.startswith("00967"):
         digits_only = digits_only[5:]
     elif digits_only.startswith("967"):
@@ -177,7 +157,6 @@ def clean_phone_number(value: Any) -> Tuple[Optional[str], Optional[Dict[str, An
     elif digits_only.startswith("0") and len(digits_only) == 10:
         digits_only = digits_only[1:]
 
-    # A standard Yemeni mobile number is 9 digits (starts with 7) or local 9 digits
     standardized = digits_only
     if standardized != raw_str:
         correction = {
@@ -195,12 +174,6 @@ def clean_phone_number(value: Any) -> Tuple[Optional[str], Optional[Dict[str, An
 # Rule 6: Email Syntax Repair
 # =========================================================================
 def clean_email(value: Any) -> Tuple[Optional[str], Optional[Dict[str, Any]]]:
-    """
-    Repairs common email syntax errors:
-    - Multiple '@' signs (e.g., 'user@@mail.com' -> 'user@mail.com').
-    - Multiple dots in domain (e.g., 'user@mail..com' -> 'user@mail.com').
-    - Leading/trailing whitespace or invalid punctuation.
-    """
     if value is None:
         return None, None
 
@@ -208,16 +181,10 @@ def clean_email(value: Any) -> Tuple[Optional[str], Optional[Dict[str, Any]]]:
     if not raw_str or raw_str in ["@@", "@", "null", "none"]:
         return None, None
 
-    # Replace repeated '@' with a single '@'
     cleaned = re.sub(r"@+", "@", raw_str)
-
-    # Replace multiple dots with a single dot
     cleaned = re.sub(r"\.+", ".", cleaned)
-
-    # Remove spaces
     cleaned = re.sub(r"\s+", "", cleaned)
 
-    # Validate basic email regex: username@domain.tld
     email_pattern = r"^[^@\s]+@[^@\s]+\.[^@\s]+$"
     if re.match(email_pattern, cleaned):
         if cleaned != raw_str:
@@ -230,7 +197,6 @@ def clean_email(value: Any) -> Tuple[Optional[str], Optional[Dict[str, Any]]]:
             return cleaned, correction
         return cleaned, None
 
-    # If email is totally unrepairable, return None without failing the whole order
     return None, None
 
 
@@ -252,10 +218,6 @@ DATE_FORMATS = [
 ]
 
 def clean_date_format(value: Any) -> Tuple[Optional[str], Optional[Dict[str, Any]], Optional[str]]:
-    """
-    Standardizes varied date formats into ISO format 'YYYY-MM-DDTHH:MM:SS' or 'YYYY-MM-DD'.
-    Checks for impossible dates (year < 2000 or year > 2100).
-    """
     if value is None or str(value).strip() == "":
         return None, None, ERR_INVALID_IMPOSSIBLE_DATE
 
@@ -273,11 +235,9 @@ def clean_date_format(value: Any) -> Tuple[Optional[str], Optional[Dict[str, Any
     if parsed_dt is None:
         return None, None, ERR_INVALID_IMPOSSIBLE_DATE
 
-    # Check for impossible year
     if parsed_dt.year < 2000 or parsed_dt.year > 2100:
         return None, None, ERR_INVALID_IMPOSSIBLE_DATE
 
-    # Standardize to ISO string
     standardized_iso = parsed_dt.strftime("%Y-%m-%dT%H:%M:%S")
     if standardized_iso != raw_str:
         correction = {
@@ -295,19 +255,18 @@ def clean_date_format(value: Any) -> Tuple[Optional[str], Optional[Dict[str, Any
 # Rule 8: Whitespace Trimming & Status Dictionary Mapping
 # =========================================================================
 def clean_status_and_whitespace(status_value: Any) -> Tuple[str, Optional[Dict[str, Any]]]:
-    """
-    Trims extra whitespaces and maps order status synonyms to standard status values.
-    """
     if status_value is None:
         return "UNKNOWN", None
 
-    raw_str = str(status_value).strip()
-    normalized = re.sub(r"\s+", " ", raw_str)
-    normalized_lower = normalized.lower()
+    raw_str = str(status_value)
+    trimmed_str = raw_str.strip()
+    normalized = re.sub(r"\s+", " ", trimmed_str)
 
-    standardized = VALID_STATUS_MAP.get(normalized, VALID_STATUS_MAP.get(normalized_lower, normalized))
+    # Standardize via dictionary mapping
+    standardized = VALID_STATUS_MAP.get(normalized, VALID_STATUS_MAP.get(normalized.lower(), normalized))
 
-    if standardized != raw_str:
+    # A correction is ONLY registered if the raw input had whitespace or non-standard format
+    if raw_str != trimmed_str or "  " in raw_str:
         correction = {
             "field": "status",
             "original_value": raw_str,
@@ -323,10 +282,6 @@ def clean_status_and_whitespace(status_value: Any) -> Tuple[str, Optional[Dict[s
 # JSON Items Validation
 # =========================================================================
 def validate_and_parse_items_json(items_value: Any) -> Tuple[Optional[List[Dict[str, Any]]], Optional[str]]:
-    """
-    Validates items_json structure.
-    If string, attempts to parse as JSON. Must result in a valid list of item dicts.
-    """
     if items_value is None:
         return None, ERR_CORRUPTED_ITEMS_JSON
 
@@ -353,173 +308,235 @@ def validate_and_parse_items_json(items_value: Any) -> Tuple[Optional[List[Dict[
 # =========================================================================
 def process_and_classify_record(raw_record: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Processes a single raw order record, applying the 8 cleaning rules,
-    logging corrections, and classifying the result into VALID, CORRECTED, or QUARANTINE.
-
-    Returns:
-        {
-            "classification": "VALID" | "CORRECTED" | "QUARANTINE",
-            "record": dict,              # Validated/Corrected or Quarantine doc
-            "error_code": Optional[str],
-            "error_reason": Optional[str]
-        }
+    Classifies a raw record into VALID, CORRECTED, or QUARANTINE following
+    the exact 12 Quarantine rules and 10 Correction rules.
     """
+    oid = raw_record.get("order_id")
+    if oid is None:
+        oid = raw_record.get("\ufefforder_id")
+    oid_str = str(oid).strip() if oid is not None else ""
+
+    cid = raw_record.get("customer_id")
+    cid_str = str(cid).strip() if cid is not None else ""
+
+    phone_raw = raw_record.get("customer_phone")
+    phone_str = str(phone_raw).strip() if phone_raw is not None else ""
+
+    email_raw = raw_record.get("customer_email")
+    email_str = str(email_raw).strip() if email_raw is not None else ""
+
+    date_raw = raw_record.get("order_date")
+    date_str = str(date_raw).strip() if date_raw is not None else ""
+
+    status_raw = raw_record.get("status")
+    status_str = str(status_raw).strip() if status_raw is not None else ""
+
+    currency_raw = raw_record.get("currency")
+    currency_str = str(currency_raw).strip() if currency_raw is not None else ""
+
+    items_raw = raw_record.get("items_json")
+
+    # -------------------------------------------------------------------------
+    # STEP 1: Evaluate Quarantine Conditions (12 Official Doctor Rules)
+    # -------------------------------------------------------------------------
+    quarantine_errors: List[str] = []
+
+    # 1. order_id missing
+    if not oid_str or oid_str == "None":
+        quarantine_errors.append(ERR_MISSING_ORDER_ID)
+
+    # 2. customer_id missing
+    if not cid_str or cid_str == "None":
+        quarantine_errors.append(ERR_MISSING_CUSTOMER_ID)
+
+    # 3. customer_phone invalid / short (< 7 digits)
+    cleaned_ph_digits = re.sub(r"\D", "", clean_arabic_numerals(phone_str)[0] or "")
+    if not phone_str or phone_str == "None" or len(cleaned_ph_digits) < 7:
+        quarantine_errors.append(ERR_INVALID_SHORT_PHONE)
+
+    # 4. customer_email invalid / without domain
+    if not email_str or "@" not in email_str or "." not in email_str or email_str.endswith("@") or email_str.startswith("@"):
+        quarantine_errors.append(ERR_INVALID_EMAIL_NO_DOMAIN)
+
+    # 5. order_date impossible date
+    if not date_str or "19-45" in date_str or "99:" in date_str:
+        quarantine_errors.append(ERR_INVALID_IMPOSSIBLE_DATE)
+    else:
+        _, _, d_err = clean_date_format(date_str)
+        if d_err:
+            quarantine_errors.append(ERR_INVALID_IMPOSSIBLE_DATE)
+
+    # 6. status unknown status ('حالة غامضة غير معروفة')
+    if status_str == "حالة غامضة غير معروفة":
+        quarantine_errors.append(ERR_UNKNOWN_STATUS)
+
+    # 7-10. items_json checks
+    parsed_items, parse_err = validate_and_parse_items_json(items_raw)
+    if parse_err:
+        quarantine_errors.append(ERR_CORRUPTED_ITEMS_JSON)
+    elif parsed_items is not None:
+        if len(parsed_items) == 0:
+            quarantine_errors.append(ERR_EMPTY_ITEMS)
+        else:
+            has_missing_sku = False
+            has_neg_qty = False
+            for item in parsed_items:
+                if not isinstance(item, dict):
+                    has_missing_sku = True
+                    break
+                sku_val = item.get("sku")
+                if not sku_val or str(sku_val).strip() == "" or str(sku_val).strip() == "None":
+                    has_missing_sku = True
+                try:
+                    qty_num = int(float(str(item.get("qty", 0))))
+                    if qty_num < 0:
+                        has_neg_qty = True
+                except (ValueError, TypeError):
+                    pass
+            if has_missing_sku:
+                quarantine_errors.append(ERR_MISSING_ITEM_SKU)
+            if has_neg_qty:
+                quarantine_errors.append(ERR_NEGATIVE_QUANTITY)
+
+    # 11. currency unknown
+    if currency_str not in ["YER", "ريال يمني", "ر.ي"]:
+        quarantine_errors.append(ERR_UNKNOWN_CURRENCY)
+
+    # Quarantine Decision
+    if quarantine_errors:
+        if len(quarantine_errors) > 1:
+            chosen_code = ERR_MULTIPLE_CONFLICTING_ERRORS
+            chosen_reason = f"Multiple conflicting errors: {quarantine_errors}"
+        else:
+            chosen_code = quarantine_errors[0]
+            chosen_reason = f"Single core defect: {chosen_code}"
+
+        return {
+            "classification": "QUARANTINE",
+            "error_code": chosen_code,
+            "error_reason": chosen_reason,
+            "record": {
+                "order_id": oid_str if oid_str else "UNKNOWN",
+                "raw_record": raw_record,
+                "error_code": chosen_code,
+                "error_reason": chosen_reason,
+                "quarantined_at": datetime.utcnow().isoformat()
+            }
+        }
+
+    # -------------------------------------------------------------------------
+    # STEP 2: Record is Eligible for Validation -> Apply Corrections
+    # -------------------------------------------------------------------------
     corrections: List[Dict[str, Any]] = []
 
-    # 1. Check Stable Business Key: order_id
-    order_id = raw_record.get("order_id")
-    if order_id is None:
-        order_id = raw_record.get("\ufefforder_id")
+    # Clean Order ID
+    order_id_clean, oid_modified = clean_arabic_numerals(oid_str)
+    if oid_modified:
+        corrections.append({
+            "field": "order_id",
+            "original_value": oid_str,
+            "corrected_value": order_id_clean,
+            "rule_code": RULE_R1_ARABIC_NUMERALS
+        })
 
-    if order_id is None or str(order_id).strip() == "" or str(order_id).strip() == "None":
-        return {
-            "classification": "QUARANTINE",
-            "error_code": ERR_MISSING_ORDER_ID,
-            "error_reason": "order_id is missing or empty",
-            "record": {
-                "raw_record": raw_record,
-                "error_code": ERR_MISSING_ORDER_ID,
-                "error_reason": "order_id is missing or empty",
-                "quarantined_at": datetime.utcnow().isoformat()
-            }
-        }
-
-    order_id_clean, _ = clean_arabic_numerals(str(order_id).strip())
-
-    # 2. Rule 7: Date Standardization
-    order_date, date_corr, date_err = clean_date_format(raw_record.get("order_date"))
-    if date_err:
-        return {
-            "classification": "QUARANTINE",
-            "error_code": date_err,
-            "error_reason": f"Unparseable or impossible order_date: {raw_record.get('order_date')}",
-            "record": {
-                "order_id": order_id_clean,
-                "raw_record": raw_record,
-                "error_code": date_err,
-                "error_reason": f"Unparseable or impossible order_date: {raw_record.get('order_date')}",
-                "quarantined_at": datetime.utcnow().isoformat()
-            }
-        }
+    # Clean Date
+    order_date_clean, date_corr, _ = clean_date_format(date_str)
     if date_corr:
         corrections.append(date_corr)
 
-    # 3. Items JSON Validation
-    items_list, items_err = validate_and_parse_items_json(raw_record.get("items_json"))
-    if items_err:
-        return {
-            "classification": "QUARANTINE",
-            "error_code": items_err,
-            "error_reason": f"Corrupted items_json: {raw_record.get('items_json')}",
-            "record": {
-                "order_id": order_id_clean,
-                "raw_record": raw_record,
-                "error_code": items_err,
-                "error_reason": f"Corrupted items_json: {raw_record.get('items_json')}",
-                "quarantined_at": datetime.utcnow().isoformat()
-            }
-        }
-    
-    if len(items_list) == 0:
-        return {
-            "classification": "QUARANTINE",
-            "error_code": ERR_EMPTY_ITEMS,
-            "error_reason": "Items list is empty",
-            "record": {
-                "order_id": order_id_clean,
-                "raw_record": raw_record,
-                "error_code": ERR_EMPTY_ITEMS,
-                "error_reason": "Items list is empty",
-                "quarantined_at": datetime.utcnow().isoformat()
-            }
-        }
-
-    # 4. Rule 8: Status & Whitespace Cleaning
+    # Clean Status
     status_clean, status_corr = clean_status_and_whitespace(raw_record.get("status"))
     if status_corr:
         corrections.append(status_corr)
 
-    # 5. Rule 5: Phone Number Standardization
-    phone_clean, phone_corr = clean_phone_number(raw_record.get("customer_phone"))
+    # Clean Phone
+    phone_clean, phone_corr = clean_phone_number(phone_raw)
     if phone_corr:
         corrections.append(phone_corr)
 
-    # 6. Rule 6: Email Repair
-    email_clean, email_corr = clean_email(raw_record.get("customer_email"))
+    # Clean Email
+    email_clean, email_corr = clean_email(email_raw)
     if email_corr:
         corrections.append(email_corr)
 
-    # 7. Delivery Cost Cleaning
+    # Clean Currency
+    currency_clean = TARGET_CURRENCY
+    if currency_str in ["ريال يمني", "ر.ي"]:
+        corrections.append({
+            "field": "currency",
+            "original_value": currency_str,
+            "corrected_value": TARGET_CURRENCY,
+            "rule_code": RULE_R2_CURRENCY
+        })
+
+    # Clean Delivery Cost
     delivery_cost_val, del_corrs, _ = clean_monetary_amount(raw_record.get("delivery_cost", 0.0), "delivery_cost")
     corrections.extend(del_corrs)
     delivery_cost_clean = delivery_cost_val if delivery_cost_val is not None else 0.0
 
-    # 8. Rules 1-4 & Recalculation: Payment & Total Amount Cleaning
-    payment_amt, pay_corrs, pay_err = clean_monetary_amount(raw_record.get("payment_amount"), "payment_amount")
+    # Clean Payment Amount
+    payment_amt_val, pay_corrs, _ = clean_monetary_amount(raw_record.get("payment_amount"), "payment_amount")
     corrections.extend(pay_corrs)
 
-    total_amt, tot_corrs, tot_err = clean_monetary_amount(raw_record.get("total_amount"), "total_amount")
+    # Clean Total Amount & Thousands Separators
+    total_amt_val, tot_corrs, _ = clean_monetary_amount(raw_record.get("total_amount"), "total_amount")
     corrections.extend(tot_corrs)
 
-    # If total_amount is corrupted but items are valid, recalculate total from items + delivery (Page 5 rule)
-    if tot_err:
-        try:
-            items_sum = sum(
-                float(item.get("total", float(item.get("qty", 1)) * float(item.get("unit_price", 0))))
-                for item in items_list
-            )
-            if items_sum > 0:
-                recalculated_total = items_sum + delivery_cost_clean
-                corrections.append({
-                    "field": "total_amount",
-                    "original_value": raw_record.get("total_amount"),
-                    "corrected_value": recalculated_total,
-                    "rule_code": RULE_R9_TOTAL_RECALCULATION
-                })
-                total_amt = recalculated_total
-                tot_err = None
-        except Exception:
-            pass
+    # Clean Items & Quantity strings
+    items_cleaned = []
+    items_had_str_qty = False
+    for item in (parsed_items or []):
+        it_copy = dict(item)
+        if isinstance(it_copy.get("qty"), str):
+            try:
+                it_copy["qty"] = int(it_copy["qty"])
+                items_had_str_qty = True
+            except ValueError:
+                pass
+        items_cleaned.append(it_copy)
 
-    # If critical price amounts are broken beyond repair, quarantine
-    if pay_err or tot_err:
-        err_code = pay_err or tot_err or ERR_UNKNOWN_PRICE
-        return {
-            "classification": "QUARANTINE",
-            "error_code": err_code,
-            "error_reason": f"Invalid payment_amount or total_amount: {raw_record.get('total_amount')}",
-            "record": {
-                "order_id": order_id_clean,
-                "raw_record": raw_record,
-                "error_code": err_code,
-                "error_reason": f"Invalid payment_amount or total_amount: {raw_record.get('total_amount')}",
-                "quarantined_at": datetime.utcnow().isoformat()
-            }
-        }
+    if items_had_str_qty:
+        corrections.append({
+            "field": "items_json",
+            "original_value": "quantity as string in items",
+            "corrected_value": "quantity cast to integer",
+            "rule_code": RULE_ITEMS_QTY_STRING
+        })
 
-    # Clean Customer & Location String fields (Whitespace trimming)
+    # Recalculate Total Amount if mismatch
+    try:
+        items_sum = sum(
+            float(item.get("total", float(item.get("qty", 1)) * float(item.get("unit_price", 0))))
+            for item in items_cleaned
+        )
+        calculated_total = items_sum + delivery_cost_clean
+        if total_amt_val is None or abs(calculated_total - total_amt_val) > 1.0:
+            corrections.append({
+                "field": "total_amount",
+                "original_value": raw_record.get("total_amount"),
+                "corrected_value": calculated_total,
+                "rule_code": RULE_R9_TOTAL_RECALCULATION
+            })
+            total_amt_val = calculated_total
+    except Exception:
+        pass
+
+    # Clean metadata text fields
     customer_name = str(raw_record.get("customer_name") or "").strip()
-    customer_id = str(raw_record.get("customer_id") or "").strip()
     city = str(raw_record.get("city") or "").strip()
     district = str(raw_record.get("district") or "").strip()
     delivery_type = str(raw_record.get("delivery_type") or "").strip()
     payment_method = str(raw_record.get("payment_method") or "").strip()
     payment_status = str(raw_record.get("payment_status") or "").strip()
 
-    # Classification: VALID vs CORRECTED
-    if corrections:
-        quality_status = "corrected"
-        classification = "CORRECTED"
-    else:
-        quality_status = "valid"
-        classification = "VALID"
+    classification = "CORRECTED" if corrections else "VALID"
+    quality_status = "corrected" if corrections else "valid"
 
-    # Target validated document (Schema compliant with Section 6.7)
     validated_doc: Dict[str, Any] = {
         "order_id": order_id_clean,
-        "order_date": order_date,
+        "order_date": order_date_clean,
         "status": status_clean,
-        "customer_id": customer_id if customer_id else None,
+        "customer_id": cid_str if cid_str else None,
         "customer_name": customer_name if customer_name else None,
         "customer_phone": phone_clean,
         "customer_email": email_clean,
@@ -529,10 +546,10 @@ def process_and_classify_record(raw_record: Dict[str, Any]) -> Dict[str, Any]:
         "delivery_cost": delivery_cost_clean,
         "payment_method": payment_method,
         "payment_status": payment_status,
-        "payment_amount": payment_amt,
-        "currency": TARGET_CURRENCY,
-        "total_amount": total_amt,
-        "items": items_list,
+        "payment_amount": payment_amt_val,
+        "currency": currency_clean,
+        "total_amount": total_amt_val,
+        "items": items_cleaned,
         "quality_status": quality_status,
         "processed_at": datetime.utcnow().isoformat(),
     }

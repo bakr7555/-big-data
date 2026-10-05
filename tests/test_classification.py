@@ -23,29 +23,32 @@ from src.quality_rules import (
 )
 
 
+BASE_RECORD = {
+    "order_id": "ORD-100",
+    "order_date": "2025-02-24T21:29:00",
+    "status": "CONFIRMED",
+    "customer_id": "CUST-1",
+    "customer_name": "محمد علي",
+    "customer_phone": "702390941",
+    "customer_email": "user@example.com",
+    "city": "تعز",
+    "district": "شعوب",
+    "delivery_type": "سريع",
+    "delivery_cost": "5000.0",
+    "payment_method": "محفظة إلكترونية",
+    "payment_status": "تم الدفع",
+    "payment_amount": "769000.0",
+    "currency": "YER",
+    "total_amount": "769000.0",
+    "items_json": '[{"sku":"SKU-1010","name":"هاتف سامسونج","qty":1,"unit_price":764000.0,"total":764000.0}]'
+}
+
+
 class TestClassification(unittest.TestCase):
 
     def test_valid_clean_record(self):
         """A clean record should be classified as VALID without corrections."""
-        raw = {
-            "order_id": "ORD-100",
-            "order_date": "2025-02-24T21:29:00",
-            "status": "CONFIRMED",
-            "customer_id": "CUST-1",
-            "customer_name": "محمد علي",
-            "customer_phone": "702390941",
-            "customer_email": "user@example.com",
-            "city": "تعز",
-            "district": "شعوب",
-            "delivery_type": "سريع",
-            "delivery_cost": "5000.0",
-            "payment_method": "محفظة إلكترونية",
-            "payment_status": "تم الدفع",
-            "payment_amount": "769000.0",
-            "currency": "YER",
-            "total_amount": "769000.0",
-            "items_json": '[{"sku":"SKU-1010","name":"هاتف سامسونج","qty":1,"unit_price":764000.0,"total":764000.0}]'
-        }
+        raw = dict(BASE_RECORD)
         result = process_and_classify_record(raw)
         self.assertEqual(result["classification"], "VALID")
         self.assertEqual(result["record"]["quality_status"], "valid")
@@ -90,9 +93,8 @@ class TestClassification(unittest.TestCase):
     def test_recalculate_total_from_items_and_delivery(self):
         """If total_amount is corrupted ('???') but items and delivery are valid, recalculate total."""
         raw = {
+            **BASE_RECORD,
             "order_id": "ORD-500",
-            "order_date": "2025-02-24T21:29:00",
-            "status": "CONFIRMED",
             "delivery_cost": "2000.0",
             "payment_amount": "27000.0",
             "total_amount": "???",
@@ -106,9 +108,8 @@ class TestClassification(unittest.TestCase):
     def test_quarantine_missing_order_id(self):
         """Missing order_id must go to quarantine."""
         raw = {
-            "order_id": "",
-            "order_date": "2025-02-24T21:29:00",
-            "items_json": '[{"sku":"SKU-1","name":"item","qty":1,"unit_price":100,"total":100}]'
+            **BASE_RECORD,
+            "order_id": ""
         }
         result = process_and_classify_record(raw)
         self.assertEqual(result["classification"], "QUARANTINE")
@@ -117,8 +118,7 @@ class TestClassification(unittest.TestCase):
     def test_quarantine_empty_items(self):
         """Empty items list must go to quarantine."""
         raw = {
-            "order_id": "ORD-301",
-            "order_date": "2025-02-24T21:29:00",
+            **BASE_RECORD,
             "items_json": "[]"
         }
         result = process_and_classify_record(raw)
@@ -128,8 +128,7 @@ class TestClassification(unittest.TestCase):
     def test_quarantine_corrupted_json(self):
         """Corrupted items_json ('not-json') must go to quarantine."""
         raw = {
-            "order_id": "ORD-300",
-            "order_date": "2025-02-24T21:29:00",
+            **BASE_RECORD,
             "items_json": "not-json"
         }
         result = process_and_classify_record(raw)
@@ -139,9 +138,8 @@ class TestClassification(unittest.TestCase):
     def test_quarantine_impossible_date(self):
         """Impossible year date must go to quarantine."""
         raw = {
-            "order_id": "ORD-400",
-            "order_date": "1800-01-01",
-            "items_json": '[{"sku":"SKU-1","name":"item","qty":1,"unit_price":100,"total":100}]'
+            **BASE_RECORD,
+            "order_date": "1800-01-01"
         }
         result = process_and_classify_record(raw)
         self.assertEqual(result["classification"], "QUARANTINE")

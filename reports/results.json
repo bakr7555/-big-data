@@ -1,74 +1,89 @@
 {
-  "run_id": "run_20260901_224519_ef3879",
-  "file_name": "orders_sample.csv",
-  "file_size_mb": 20.88,
+  "run_id": "run_20261004_234557_43f125",
+  "file_name": "01_student_test_small.csv",
+  "file_size_mb": 8.61,
   "engine_used": "python_batch",
-  "rows_read": 50000,
-  "raw_loaded": 50000,
-  "valid_count": 339,
-  "corrected_count": 47603,
-  "quarantine_count": 2058,
-  "elapsed_seconds": 24.44,
-  "throughput": 2046.0,
+  "rows_read": 20000,
+  "raw_loaded": 20000,
+  "valid_count": 12000,
+  "corrected_count": 5000,
+  "quarantine_count": 3000,
+  "elapsed_seconds": 15.47,
+  "throughput": 1292.7,
   "batch_size": 5000,
   "partitions": 1,
   "error_case_counts": {
-    "CORRUPTED_ITEMS_JSON": 659,
-    "AMBIGUOUS_NEGATIVE_VALUE": 334,
-    "MISSING_ORDER_ID": 382,
-    "EMPTY_ITEMS": 351,
-    "INVALID_IMPOSSIBLE_DATE": 332
+    "الطلب بدون عناصر": 250,
+    "بريد إلكتروني بدون نطاق": 250,
+    "حالة طلب غير معروفة": 250,
+    "العناصر تالف JSON": 250,
+    "كمية سالبة": 250,
+    "مفقود من أحد العناصر SKU": 250,
+    "معرف العميل مفقود": 250,
+    "عملة غير معروفة": 250,
+    "تاريخ مستحيل": 250,
+    "عدة أخطاء جوهرية متعارضة": 250,
+    "معرف الطلب مفقود": 250,
+    "رقم هاتف غير صالح وقصير": 250
   },
-  "inserted_count": 47599,
-  "updated_count": 343,
+  "inserted_count": 0,
+  "updated_count": 17000,
   "unchanged_count": 0,
   "timestamps": {
-    "started_at": "2026-09-01T22:45:19.751408",
-    "completed_at": "2026-09-01T22:45:44.189740",
-    "duration_seconds": 24.44
+    "started_at": "2026-10-04T23:45:57.529943",
+    "completed_at": "2026-10-04T23:46:13.001893",
+    "duration_seconds": 15.47
   },
   "performance": {
-    "total_duration_seconds": 24.44,
-    "throughput_records_per_sec": 2046.0
+    "total_duration_seconds": 15.47,
+    "throughput_records_per_sec": 1292.7
   },
   "record_counts": {
-    "run_raw_count": 50000,
-    "run_valid_count": 339,
-    "run_corrected_count": 47603,
-    "run_quarantine_count": 2058
+    "run_raw_count": 20000,
+    "run_valid_count": 12000,
+    "run_corrected_count": 5000,
+    "run_quarantine_count": 3000
   },
   "consistency_rule": {
     "is_consistent": true,
-    "raw_count": 50000,
-    "sum_processed": 50000,
-    "valid_count": 339,
-    "corrected_count": 47603,
-    "quarantine_count": 2058,
+    "raw_count": 20000,
+    "sum_processed": 20000,
+    "valid_count": 12000,
+    "corrected_count": 5000,
+    "quarantine_count": 3000,
     "discrepancy": 0,
-    "equation": "50000 (raw) == 339 (valid) + 47603 (corrected) + 2058 (quarantine)"
+    "equation": "20000 (raw) == 12000 (valid) + 5000 (corrected) + 3000 (quarantine)"
   },
   "upsert_metrics": {
-    "inserted_new": 47599,
-    "updated_existing": 343,
+    "inserted_new": 0,
+    "updated_existing": 17000,
     "unchanged": 0,
-    "total_upsert_operations": 47942
+    "total_upsert_operations": 17000
   },
   "quarantine_breakdown": {
-    "CORRUPTED_ITEMS_JSON": 659,
-    "AMBIGUOUS_NEGATIVE_VALUE": 334,
-    "MISSING_ORDER_ID": 382,
-    "EMPTY_ITEMS": 351,
-    "INVALID_IMPOSSIBLE_DATE": 332
+    "الطلب بدون عناصر": 250,
+    "بريد إلكتروني بدون نطاق": 250,
+    "حالة طلب غير معروفة": 250,
+    "العناصر تالف JSON": 250,
+    "كمية سالبة": 250,
+    "مفقود من أحد العناصر SKU": 250,
+    "معرف العميل مفقود": 250,
+    "عملة غير معروفة": 250,
+    "تاريخ مستحيل": 250,
+    "عدة أخطاء جوهرية متعارضة": 250,
+    "معرف الطلب مفقود": 250,
+    "رقم هاتف غير صالح وقصير": 250
   },
   "rule_corrections_breakdown": {
-    "R8_WHITESPACE_AND_SYNONYMS": 47603,
-    "R1_ARABIC_NUMERALS": 1653,
-    "R3_THOUSANDS_SEPARATOR": 540,
-    "EMAIL_REPEATED_SYMBOLS": 1120,
-    "R7_DATE_STANDARDIZATION": 1176,
-    "R2_CURRENCY_NORMALIZATION": 566,
-    "R4_PRICE_WORDS_TRANSLATION": 544,
-    "R5_PHONE_STANDARDIZATION": 1192
+    "R2_CURRENCY_NORMALIZATION": 500,
+    "ITEMS_QTY_STRING_CAST": 500,
+    "R9_TOTAL_AMOUNT_RECALCULATION": 500,
+    "R8_WHITESPACE_AND_SYNONYMS": 500,
+    "R7_DATE_STANDARDIZATION": 500,
+    "R5_PHONE_STANDARDIZATION": 500,
+    "R1_ARABIC_NUMERALS": 1000,
+    "R3_THOUSANDS_SEPARATOR": 500,
+    "EMAIL_REPEATED_SYMBOLS": 500
   },
   "configuration": {
     "batch_size": 5000,

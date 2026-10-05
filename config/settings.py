@@ -32,6 +32,13 @@ COLLECTION_RAW: str = os.getenv("COLLECTION_RAW", "orders_raw")
 COLLECTION_VALIDATED: str = os.getenv("COLLECTION_VALIDATED", "orders_validated")
 COLLECTION_QUARANTINE: str = os.getenv("COLLECTION_QUARANTINE", "orders_quarantine")
 
+# Phase 2: Materialized Views & Scheduled Job Logging
+COLLECTION_MV_DAILY_SALES: str = os.getenv("COLLECTION_MV_DAILY_SALES", "daily_sales_summary")
+COLLECTION_MV_TOP_PRODUCTS: str = os.getenv("COLLECTION_MV_TOP_PRODUCTS", "top_products_summary")
+COLLECTION_JOB_LOGS: str = os.getenv("COLLECTION_JOB_LOGS", "job_execution_logs")
+COLLECTION_MV_METADATA: str = os.getenv("COLLECTION_MV_METADATA", "mv_refresh_metadata")
+
+
 # =========================================================================
 # 3. Hybrid Routing & Batch Engine Settings (Sections 6.2 & 6.3)
 # =========================================================================

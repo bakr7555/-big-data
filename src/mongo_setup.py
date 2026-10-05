@@ -67,6 +67,11 @@ def setup_mongo_collections(db: Database) -> dict:
     val_col.create_index([("run_id", ASCENDING)], name="idx_val_run_id")
     val_col.create_index([("status", ASCENDING)], name="idx_val_status")
     val_col.create_index([("order_date", ASCENDING)], name="idx_val_date")
+    # Phase 2 Indexes: Single, Compound, Multikey
+    val_col.create_index([("customer_id", ASCENDING)], name="idx_customer_id")
+    val_col.create_index([("order_date", -1), ("status", ASCENDING)], name="idx_order_date_status")
+    val_col.create_index([("city", ASCENDING), ("total_amount", -1)], name="idx_city_total_amount")
+    val_col.create_index([("items.sku", ASCENDING)], name="idx_items_sku")
     print(f" - Collection '{COLLECTION_VALIDATED}': UNIQUE Index on 'order_id' verified (Idempotency guarantee).")
     # 3. Setup orders_quarantine collection & indexes
     quar_col = db[COLLECTION_QUARANTINE]

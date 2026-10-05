@@ -248,6 +248,14 @@ def run_pipeline(
         # -----------------------------------------------------------------
         # STEP 5: SAVE METRICS & PRINT SUMMARY
         # -----------------------------------------------------------------
+        # Automatically sync Phase 2 Materialized Views after ELT run
+        try:
+            from src.materialized_views import refresh_all_materialized_views
+            print("\n[Materialized Views] Auto-syncing views after pipeline ingestion...")
+            refresh_all_materialized_views(db, full_refresh=False)
+        except Exception as mv_err:
+            print(f"[WARN] Materialized Views auto-refresh skipped: {mv_err}")
+
         metrics.save_to_file(REPORTS_FILE_PATH)
         metrics.print_terminal_summary()
 
